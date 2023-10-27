@@ -179,7 +179,7 @@ ActionController::Base.configure:
 ActionController::Base.const_missing:
   types:
   - undefined
-  skip: false
+  skip: true
 ActionController::Base.content_security_policy:
   types:
   - undefined
