@@ -40,7 +40,9 @@ module Solargraph
 
         def match_children(children, args = @args)
           args.each_with_index.all? do |arg, i|
-            if children[i].is_a?(::Parser::AST::Node)
+            if arg == :any
+              true
+            elsif children[i].is_a?(::Parser::AST::Node) && arg.is_a?(Symbol)
               children[i].type == arg
             else
               children[i] == arg
