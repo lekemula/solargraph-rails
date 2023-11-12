@@ -25,7 +25,17 @@ module Solargraph
 
         rspec_const = ::Parser::AST::Node.new(:const, [nil, :RSpec])
         walker.on :send, [rspec_const, :describe, :any] do |ast|
-          pin = described_class_method(source_map.filename, ast)
+          pin = rspec_described_class_method(source_map.filename, ast)
+          pins << pin unless pin.nil?
+        end
+
+        walker.on :send, [nil, :let] do |ast|
+          pin = rspec_let_method(source_map.filename, ast)
+          pins << pin unless pin.nil?
+        end
+
+        walker.on :send, [nil, :subject] do |ast|
+          pin = rspec_let_method(source_map.filename, ast)
           pins << pin unless pin.nil?
         end
 
@@ -42,8 +52,23 @@ module Solargraph
 
       # @param filename [String]
       # @param ast [Parser::AST::Node]
-      # @return [Pin::Method]
-      def described_class_method(filename, ast)
+      # @return [Pin::Method, nil]
+      def rspec_let_method(filename, ast)
+        return unless ast.children
+        return unless ast.children[2]&.children
+        method_name = ast.children[2].children[0]&.to_s or return
+
+        Util.build_public_method(
+          Solargraph::Pin::Namespace.new(name: ''),
+          method_name,
+          location: Util.build_location(ast, filename)
+        )
+      end
+
+      # @param filename [String]
+      # @param ast [Parser::AST::Node]
+      # @return [Pin::Method, nil]
+      def rspec_described_class_method(filename, ast)
         class_ast = ast.children[2]
         return unless class_ast.type == :const
 
