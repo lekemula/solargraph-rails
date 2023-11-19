@@ -1,8 +1,16 @@
 module Helpers
   def load_string(filename, str)
     source = Solargraph::Source.load_string(str, filename)
-    api_map.map(source)
+    api_map.map(source) # api_map should be defined in the spec
     source
+  end
+
+  def load_sources(*sources)
+    workspace = Solargraph::Workspace.new('*')
+    sources.each { |s| workspace.merge(s) }
+    library = Solargraph::Library.new(workspace)
+    library.map!
+    api_map.catalog library # api_map should be defined in the spec
   end
 
   def assert_matches_definitions(map, class_name, definition_name, update: false)
@@ -146,6 +154,15 @@ module Helpers
     expect(pin).to_not be_nil
     expect(pin.scope).to eq(:class)
     expect(pin.return_type.map(&:tag)).to eq(return_type)
+
+    yield pin if block_given?
+  end
+
+  def assert_namespace(map, query, &block)
+    pin = find_pin(query, map)
+    expect(pin).to_not be_nil
+    expect(pin.scope).to eq(:class)
+    expect(pin.return_type.map(&:tag)).to eq(["Class<#{query}>"])
 
     yield pin if block_given?
   end

@@ -2,26 +2,26 @@ require 'spec_helper'
 
 RSpec.describe Solargraph::Rails::Rspec do
   let(:api_map) { Solargraph::ApiMap.new }
+  let(:library) { Solargraph::Library.new }
 
   it 'generates method for described_class' do
-    load_string 'spec/models/some_namespace/transaction_spec.rb', <<-RUBY
+    filename = File.expand_path('spec/models/some_namespace/transaction_spec.rb')
+    load_string filename, <<-RUBY
 RSpec.describe SomeNamespace::Transaction, type: :model do
   it 'should do something' do
-    descr
+    described_c
   end
 end 
     RUBY
 
-    assert_public_instance_method(api_map, '#described_class', ['Class<SomeNamespace::Transaction>']) do |pin|
-      expect(pin.location.filename).to eq(
-        File.expand_path('spec/models/some_namespace/transaction_spec.rb')
-      )
+    assert_class_method(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction.described_class', ['Class<SomeNamespace::Transaction>']) do |pin|
+      expect(pin.location.filename).to eq(filename)
       expect(pin.location.range.to_hash).to eq(
         { start: { line: 0, character: 0 }, end: { line: 0, character: 15 } }
       )
     end
 
-    expect(completion_at('spec/models/some_namespace/transaction_spec.rb', [2, 9])).to include("described_class")
+    expect(completion_at(filename, [2, 15])).to include("described_class")
   end
 
   it 'generates method for lets/subject definitions' do
@@ -37,9 +37,63 @@ RSpec.describe SomeNamespace::Transaction, type: :model do
 end 
     RUBY
     
-    assert_public_instance_method(api_map, '#transaction', ["undefined"])
-    assert_public_instance_method(api_map, '#something', ["undefined"])
+    assert_class_method(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction.transaction', ["undefined"])
+    assert_class_method(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction.something', ["undefined"])
     expect(completion_at('spec/models/some_namespace/transaction_spec.rb', [5, 8])).to include("transaction")
     expect(completion_at('spec/models/some_namespace/transaction_spec.rb', [6, 8])).to include("something")
+  end
+
+  it 'generates modules for describe/context blocks' do
+    load_string 'spec/models/some_namespace/transaction_spec.rb', <<-RUBY
+RSpec.describe SomeNamespace::Transaction, type: :model do
+  describe 'describing something' do
+    context 'when some context' do
+      let(:something) { 1 }
+
+      it 'should do something' do
+      end
+    end
+
+    context 'when some other context' do
+      let(:something) { 1 }
+
+      it 'should do something' do
+      end
+    end
+  end
+end 
+    RUBY
+
+    assert_namespace(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction')
+    assert_namespace(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction::DescribingSomething')
+    assert_namespace(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction::DescribingSomething::WhenSomeContext')
+    assert_namespace(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction::DescribingSomething::WhenSomeOtherContext')
+  end
+
+  it 'shouldn\'t complete for rspec definitions from other spec files' do
+    file1 = load_string 'spec/models/test_one_spec.rb', <<-RUBY
+RSpec.describe TestOne, type: :model do
+  let(:variable_one) { 1 }
+
+  it 'should do something' do
+    vari
+  end
+end
+    RUBY
+
+    file2 = load_string 'spec/models/test_two_spec.rb', <<-RUBY
+RSpec.describe TestTwo, type: :model do
+    it 'should do something' do
+      vari
+    end
+    context 'test', sometag: true do
+    end
+end
+    RUBY
+
+    load_sources(file1, file2)
+
+    expect(completion_at('spec/models/test_one_spec.rb', [4, 10])).to include("variable_one")
+    expect(completion_at('spec/models/test_two_spec.rb', [2, 10])).to_not include("variable_one")
   end
 end
