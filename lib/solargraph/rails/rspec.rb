@@ -28,7 +28,7 @@ module Solargraph
         # @type [Array<Pin::Block>]
         block_pins = []
 
-        each_rspec_block(walker.ast, "RSpec::ExampleGroups") do |namespace_name, ast|
+        each_rspec_block(walker.ast, 'RSpec::ExampleGroups') do |namespace_name, ast|
           location = Util.build_location(ast, source_map.filename)
           namespace_pin = Solargraph::Pin::Namespace.new(
             name: namespace_name,
@@ -38,10 +38,30 @@ module Solargraph
           block_pin = Solargraph::Pin::Block.new(
             closure: namespace_pin,
             location: location,
+            receiver: RubyVM::AbstractSyntaxTree.parse('it()').children[2]
           )
- 
+
+          # Include parent example groups to share let definitions
+          parent_namespace_name = namespace_name.split('::')[0..-2].join('::')
+          namespace_include_pin = Util.build_module_include(
+            namespace_pin,
+            parent_namespace_name,
+            location
+          )
+
+          # RSpec executes "it" example blocks in the context of the example group.
+          # @yieldsef changes the binding of the block to correct class.
+          it_method_with_binding = Util.build_public_method(
+            namespace_pin,
+            'it',
+            comments: ["@yieldself [#{namespace_pin.path}]"],
+            scope: :class
+          )
+
           namespace_pins << namespace_pin
           block_pins << block_pin
+          pins << it_method_with_binding
+          pins << namespace_include_pin
         end
         pins += namespace_pins
         pins += block_pins
@@ -91,15 +111,16 @@ module Solargraph
 
       # @param ast [Parser::AST::Node]
       # @yield [String, Parser::AST::Node]
-      def each_rspec_block(ast, parent_namespace = "RSpec::ExampleGroups", &block)
+      def each_rspec_block(ast, parent_namespace = 'RSpec::ExampleGroups', &block)
         return unless ast.is_a?(::Parser::AST::Node)
+
         is_a_block = ast.type == :block && ast.children[0].type == :send
-        is_a_context = is_a_block && [:describe, :context].include?(ast.children[0].children[1])
+        is_a_context = is_a_block && %i[describe context].include?(ast.children[0].children[1])
         namespace_name = parent_namespace
 
         if is_a_context
           description_node = ast.children[0].children[2]
-          namespace_name = parent_namespace + "::" + rspec_describe_class_name(description_node)
+          namespace_name = parent_namespace + '::' + rspec_describe_class_name(description_node)
           block.call(namespace_name, ast) if block
         end
 
@@ -112,13 +133,14 @@ module Solargraph
       def rspec_let_method(namespace, ast)
         return unless ast.children
         return unless ast.children[2]&.children
+
         method_name = ast.children[2].children[0]&.to_s or return
 
         Util.build_public_method(
           namespace,
           method_name,
           location: Util.build_location(ast, namespace.filename),
-          scope: :class # TODO: Make it work with :instance like RSpec declares it
+          scope: :instance
         )
       end
 
@@ -149,7 +171,7 @@ module Solargraph
           'described_class',
           types: ["Class<#{class_name}>"],
           location: Util.build_location(class_ast, namespace.filename),
-          scope: :class # TODO: Make it work with :instance like RSpec declares it
+          scope: :instance
         )
       end
 
@@ -170,6 +192,7 @@ module Solargraph
       # @return [String]
       def string_to_const_name(string_ast)
         return unless string_ast.type == :str
+
         string = string_ast.children[0]
         string.split(/\W+/).map(&:capitalize).join
       end

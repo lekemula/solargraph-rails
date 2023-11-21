@@ -6,6 +6,7 @@ module Solargraph
         name,
         types: nil,
         location: nil,
+        comments: [],
         attribute: false,
         scope: :instance
       )
@@ -14,10 +15,10 @@ module Solargraph
           location: location,
           closure: ns,
           scope: scope,
-          attribute: attribute
+          attribute: attribute,
+          comments: []
         }
 
-        comments = []
         comments << "@return [#{types.join(',')}]" if types
 
         opts[:comments] = comments.join("\n")
