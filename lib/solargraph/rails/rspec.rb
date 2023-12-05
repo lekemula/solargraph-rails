@@ -129,8 +129,11 @@ module Solargraph
 
         if is_a_context
           description_node = ast.children[0].children[2]
-          namespace_name = parent_namespace + '::' + rspec_describe_class_name(description_node)
-          block.call(namespace_name, ast) if block
+          block_name = rspec_describe_class_name(description_node)
+          if block_name
+            namespace_name = parent_namespace + '::' + block_name
+            block.call(namespace_name, ast) if block
+          end
         end
 
         ast.children.each { |child| each_rspec_block(child, namespace_name, &block) }
@@ -154,14 +157,15 @@ module Solargraph
       end
 
       # @param ast [Parser::AST::Node]
-      # @return [String]
+      # @return [String, nil]
       def rspec_describe_class_name(ast)
         if ast.type == :str
           string_to_const_name(ast)
         elsif ast.type == :const
           full_constant_name(ast).gsub('::', '')
         else
-          raise "Unexpected AST type #{ast.type}"
+          Solargraph.logger.warn "[Rails][RSpec] Unexpected AST type #{ast.type}"
+          nil
         end
       end
 
