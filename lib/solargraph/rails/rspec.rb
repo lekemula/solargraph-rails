@@ -28,13 +28,21 @@ module Solargraph
         # @type [Array<Pin::Block>]
         block_pins = []
 
+        # Each describe/context block
         each_rspec_block(walker.ast, 'RSpec::ExampleGroups') do |namespace_name, ast|
           location = Util.build_location(ast, source_map.filename)
+          
           namespace_pin = Solargraph::Pin::Namespace.new(
             name: namespace_name,
             location: location
           )
 
+          # Define a dynamic module for the example group block
+          # Example: 
+          #   RSpec.describe Foo::Bar do  # => module RSpec::ExampleGroups::FooBar
+          #     context 'some context' do # => module RSpec::ExampleGroups::FooBar::SomeContext
+          #     end
+          #   end
           block_pin = Solargraph::Pin::Block.new(
             closure: namespace_pin,
             location: location,
@@ -109,6 +117,7 @@ module Solargraph
         end.first
       end
 
+      # Find all describe/context blocks in the AST.
       # @param ast [Parser::AST::Node]
       # @yield [String, Parser::AST::Node]
       def each_rspec_block(ast, parent_namespace = 'RSpec::ExampleGroups', &block)
@@ -188,13 +197,30 @@ module Solargraph
         end
       end
 
+      # @see https://github.com/rspec/rspec-core/blob/1eeadce5aa7137ead054783c31ff35cbfe9d07cc/lib/rspec/core/example_group.rb#L862
       # @param ast [Parser::AST::Node]
       # @return [String]
       def string_to_const_name(string_ast)
         return unless string_ast.type == :str
+        
+        name = string_ast.children[0]
+        return "Anonymous".dup if name.empty?
+        # Convert to CamelCase.
+        name = ' ' + name
+        name.gsub!(/[^0-9a-zA-Z]+([0-9a-zA-Z])/) do
+          match = ::Regexp.last_match[1]
+          match.upcase!
+          match
+        end
 
-        string = string_ast.children[0]
-        string.split(/\W+/).map(&:capitalize).join
+        name.lstrip!                # Remove leading whitespace
+        name.gsub!(/\W/, ''.freeze) # JRuby, RBX and others don't like non-ascii in const names
+
+        # Ruby requires first const letter to be A-Z. Use `Nested`
+        # as necessary to enforce that.
+        name.gsub!(/\A([^A-Z]|\z)/, 'Nested\1'.freeze)
+
+        name
       end
     end
   end

@@ -35,13 +35,38 @@ RSpec.describe SomeNamespace::Transaction, type: :model do
     tran
     some
   end
+
+  context 'nested context' do
+    let(:nested_something) { 1 }
+
+    it 'should do something' do
+      tran
+      some
+      nest
+    end
+
+    describe 'nested nested context' do
+      it 'DELETE /users/:user_id' do
+        tran
+        some
+        nest
+      end
+    end
+  end
 end 
     RUBY
     
     assert_public_instance_method(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction#transaction', ["undefined"])
     assert_public_instance_method(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction#something', ["undefined"])
+    assert_public_instance_method(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction::NestedContext#nested_something', ["undefined"])
     expect(completion_at(filename, [5, 8])).to include("transaction")
     expect(completion_at(filename, [6, 8])).to include("something")
+    expect(completion_at(filename, [13, 8])).to include("transaction")
+    expect(completion_at(filename, [14, 8])).to include("something")
+    expect(completion_at(filename, [15, 8])).to include("nested_something")
+    expect(completion_at(filename, [20, 8])).to include("transaction")
+    expect(completion_at(filename, [21, 8])).to include("something")
+    expect(completion_at(filename, [21, 8])).to include("nested_something")
   end
 
   it 'generates modules for describe/context blocks' do
@@ -56,7 +81,7 @@ RSpec.describe SomeNamespace::Transaction, type: :model do
       end
     end
 
-    context 'when some other context' do
+    context 'TEST_some/symbols-' do
       let(:something) { 1 }
 
       it 'should do something' do
@@ -69,7 +94,7 @@ end
     assert_namespace(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction')
     assert_namespace(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction::DescribingSomething')
     assert_namespace(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction::DescribingSomething::WhenSomeContext')
-    assert_namespace(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction::DescribingSomething::WhenSomeOtherContext')
+    assert_namespace(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction::DescribingSomething::TESTSomeSymbols')
   end
 
   it 'shouldn\'t complete for rspec definitions from other spec files' do
