@@ -8,8 +8,10 @@ RSpec.describe Solargraph::Rails::Rspec do
     filename = File.expand_path('spec/models/some_namespace/transaction_spec.rb')
     load_string filename, <<-RUBY
 RSpec.describe SomeNamespace::Transaction, type: :model do
-  it 'should do something' do
-    described_c
+  context 'some context' do
+    it 'should do something' do
+      descr
+    end
   end
 end 
     RUBY
@@ -21,7 +23,7 @@ end
       )
     end
 
-    expect(completion_at(filename, [2, 15])).to include("described_class")
+    expect(completion_at(filename, [3, 11])).to include("described_class")
   end
 
   it 'generates method for lets/subject definitions' do
