@@ -111,10 +111,10 @@ module Solargraph
       # @param line [Integer]
       # @return [Pin::Namespace]
       def closest_namespace_pin(namespace_pins, line)
-        namespace_pins.sort_by do |namespace_pin|
+        sorted = namespace_pins.min_by do |namespace_pin|
           distance = line - namespace_pin.location.range.start.line
-          distance > 0 ? distance : Float::INFINITY
-        end.first
+          distance >= 0 ? distance : Float::INFINITY
+        end
       end
 
       # Find all describe/context blocks in the AST.
