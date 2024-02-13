@@ -74,12 +74,14 @@ module Solargraph
         pins += namespace_pins
         pins += block_pins
 
+        # @type [Pin::Method, nil]
+        described_class_pin = nil
         rspec_const = ::Parser::AST::Node.new(:const, [nil, :RSpec])
         walker.on :send, [rspec_const, :describe, :any] do |ast|
           namespace_pin = closest_namespace_pin(namespace_pins, ast.loc.line)
 
-          pin = rspec_described_class_method(namespace_pin, ast)
-          pins << pin unless pin.nil?
+          described_class_pin = rspec_described_class_method(namespace_pin, ast)
+          pins << described_class_pin unless described_class_pin.nil?
         end
 
         walker.on :send, [nil, :let] do |ast|
@@ -89,14 +91,33 @@ module Solargraph
           pins << pin unless pin.nil?
         end
 
+        # @type [Pin::Method, nil]
+        subject_pin = nil
         walker.on :send, [nil, :subject] do |ast|
           namespace_pin = closest_namespace_pin(namespace_pins, ast.loc.line)
 
-          pin = rspec_let_method(namespace_pin, ast)
-          pins << pin unless pin.nil?
+          subject_pin = rspec_let_method(namespace_pin, ast)
+          pins << subject_pin unless subject_pin.nil?
         end
 
         walker.walk
+
+        # Implicit subject
+        if !subject_pin && described_class_pin
+          namespace_pin = closest_namespace_pin(namespace_pins, described_class_pin.location.range.start.line)
+          described_class = described_class_pin.return_type.first.subtypes.first.name
+
+          subject_pin = Util.build_public_method(
+            namespace_pin,
+            'subject',
+            types: [described_class],
+            location: described_class_pin.location,
+            scope: :instance
+          )
+          pins << subject_pin
+        end
+
+
         if pins.any?
           Solargraph.logger.debug(
             "[Rails][RSpec] added #{pins.map(&:inspect)} to #{source_map.filename}"
@@ -141,16 +162,17 @@ module Solargraph
 
       # @param namespace [Pin::Namespace]
       # @param ast [Parser::AST::Node]
+      # @param types [Array<String>, nil]
       # @return [Pin::Method, nil]
-      def rspec_let_method(namespace, ast)
+      def rspec_let_method(namespace, ast, types: nil)
         return unless ast.children
         return unless ast.children[2]&.children
 
         method_name = ast.children[2].children[0]&.to_s or return
-
         Util.build_public_method(
           namespace,
           method_name,
+          types:,
           location: Util.build_location(ast, namespace.filename),
           scope: :instance
         )

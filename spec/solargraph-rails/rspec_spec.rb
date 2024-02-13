@@ -71,6 +71,20 @@ end
     expect(completion_at(filename, [21, 8])).to include("nested_something")
   end
 
+  it 'generates implicit subject method' do
+    filename = File.expand_path('spec/models/some_namespace/transaction_spec.rb')
+    load_string filename, <<-RUBY
+RSpec.describe SomeNamespace::Transaction, type: :model do
+  it 'should do something' do
+    sub
+  end
+end 
+    RUBY
+
+    assert_public_instance_method(api_map, 'RSpec::ExampleGroups::SomeNamespaceTransaction#subject', ["SomeNamespace::Transaction"])
+    expect(completion_at(filename, [2, 6])).to include("subject")
+  end
+
   it 'generates modules for describe/context blocks' do
     filename = File.expand_path('spec/models/some_namespace/transaction_spec.rb')
     load_string filename, <<-RUBY
