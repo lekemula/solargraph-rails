@@ -1,9 +1,17 @@
+# frozen_string_literal: true
+
+require_relative 'rspec/config'
+
 module Solargraph
   module Rails
     class Rspec
       # @return [Rspec]
       def self.instance
-        @instance ||= new
+        @instance ||= new(config: Config.new)
+      end
+
+      def initialize(config:)
+        @config = config
       end
 
       # @param filename [String]
@@ -84,11 +92,13 @@ module Solargraph
           pins << described_class_pin unless described_class_pin.nil?
         end
 
-        walker.on :send, [nil, :let] do |ast|
-          namespace_pin = closest_namespace_pin(namespace_pins, ast.loc.line)
+        config.let_methods.each do |let_method|
+          walker.on :send, [nil, let_method] do |ast|
+            namespace_pin = closest_namespace_pin(namespace_pins, ast.loc.line)
 
-          pin = rspec_let_method(namespace_pin, ast)
-          pins << pin unless pin.nil?
+            pin = rspec_let_method(namespace_pin, ast)
+            pins << pin unless pin.nil?
+          end
         end
 
         # @type [Pin::Method, nil]
@@ -127,6 +137,9 @@ module Solargraph
       end
 
       private
+
+      # @return [Config]
+      attr_reader :config
 
       # @param namespace_pins [Array<Pin::Namespace>]
       # @param line [Integer]
