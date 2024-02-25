@@ -151,6 +151,21 @@ RSpec.describe Solargraph::Rails::Rspec do
     expect(completion_at(filename2, [2, 10])).to_not include('variable_one')
   end
 
+  it 'completes RSpec::Matchers methods' do 
+    filename = File.expand_path('spec/models/some_namespace/transaction_spec.rb')
+    load_string filename, <<~RUBY
+      RSpec.describe SomeNamespace::Transaction, type: :model do
+        context 'some context' do
+          it 'should do something' do
+            expect(subject).to be_a_
+          end
+        end
+      end
+    RUBY
+
+    expect(completion_at(filename, [3, 29])).to include('be_a_kind_of')
+  end
+
   describe 'configurations' do
     describe 'let_methods' do
       before(:each) do

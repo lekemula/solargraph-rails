@@ -21,9 +21,9 @@ module Solargraph
       end
 
       # @param source_map [SourceMap]
-      # @param ns [Pin::Namespace, nil]
+      # @param _ns [Pin::Namespace, nil]
       # @return [Array<Pin::Base>]
-      def process(source_map, _ns)
+      def local(source_map, _ns)
         Solargraph.logger.debug "[Rails][RSpec] processing #{source_map.filename}"
 
         return [] unless self.class.valid_filename?(source_map.filename)
@@ -35,6 +35,19 @@ module Solargraph
         namespace_pins = []
         # @type [Array<Pin::Block>]
         block_pins = []
+
+        # Setup RSpec helpers
+        example_group_pin = Solargraph::Pin::Namespace.new(
+          name: 'RSpec::ExampleGroups',
+          location: Util.dummy_location(source_map.filename)
+        )
+        ['RSpec::Matchers'].each do |helper_module|
+          pins << Util.build_module_include(
+            example_group_pin,
+            helper_module,
+            example_group_pin.location
+          )
+        end
 
         # Each describe/context block
         each_rspec_block(walker.ast, 'RSpec::ExampleGroups') do |namespace_name, ast|

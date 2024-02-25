@@ -42,14 +42,13 @@ module Solargraph
         ns = ds.first
 
         unless ns
-          pins += run_feature { Rspec.instance.process(source_map, ns) }
+          pins += run_feature { Rspec.instance.local(source_map, ns) }
           return Solargraph::Environ.new(pins: pins)
         end
 
         pins += run_feature { Schema.instance.process(source_map, ns) }
         pins += run_feature { Annotate.instance.process(source_map, ns) }
         pins += run_feature { Model.instance.process(source_map, ns) }
-        pins += run_feature { Rspec.instance.process(source_map, ns) }
         pins += run_feature { Storage.instance.process(source_map, ns) }
         pins += run_feature { Autoload.instance.process(source_map, ns, ds) }
         pins += run_feature { Devise.instance.process(source_map, ns) }
