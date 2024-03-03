@@ -166,6 +166,26 @@ RSpec.describe Solargraph::Rails::Rspec do
     expect(completion_at(filename, [3, 29])).to include('be_a_kind_of')
   end
 
+  it 'completes normal ruby methods' do
+    filename = File.expand_path('spec/models/some_namespace/transaction_spec.rb')
+    load_string filename, <<~RUBY
+      RSpec.describe SomeNamespace::Transaction, type: :model do
+        def my_method
+        end
+
+        context 'some context' do
+          it 'should do something' do
+            my_me
+          end
+        end
+      end
+      my_meth
+    RUBY
+
+    # expect(completion_at(filename, [7, 11])).to include('my_method')
+    expect(completion_at(filename, [10, 5])).to include('my_method')
+  end
+
   describe 'configurations' do
     describe 'let_methods' do
       before(:each) do
