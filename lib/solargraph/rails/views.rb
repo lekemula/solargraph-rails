@@ -134,7 +134,16 @@ module Solargraph
         view_class = api_map.get_path_pins(fqns).find { |pin| pin.is_a?(Solargraph::Pin::Namespace) }
         return [] unless view_class
 
-        controller = fqns.delete_suffix('View')
+        helper_method_pins(api_map, fqns.delete_suffix('View'), view_class)
+      end
+
+      private
+
+      # @param api_map [Solargraph::ApiMap]
+      # @param controller [String]
+      # @param view_class [Solargraph::Pin::Namespace]
+      # @return [Array<Solargraph::Pin::Method>]
+      def helper_method_pins(api_map, controller, view_class)
         helper_method_names(api_map, controller).filter_map do |name|
           target = api_map.get_method_stack(controller, name).first
           next unless target.is_a?(Solargraph::Pin::Method)
@@ -151,8 +160,6 @@ module Solargraph
           )
         end
       end
-
-      private
 
       # Names a controller declares with `helper_method`, in its own body or in the modules it includes. Those of its
       # parent controllers belong to the parent's view class.
@@ -246,23 +253,39 @@ module Solargraph
       # @param view_class [Solargraph::Pin::Namespace]
       # @return [Array<Solargraph::Pin::Base>]
       def assigns(source_map, controller, view_class)
-        ivars = source_map.pins.select do |pin|
-          pin.is_a?(Solargraph::Pin::InstanceVariable) && pin.scope == :instance &&
-            pin.binder.namespace == controller.path
-        end
+        assign_pins(controller_ivars(controller.path, source_map.pins, source_map.source), view_class)
+      end
+
+      # @param ivars [Array<Array(Solargraph::Pin::InstanceVariable, Boolean)>] each with whether a callback assigns it
+      # @param view_class [Solargraph::Pin::Namespace]
+      # @return [Array<Solargraph::Pin::Base>]
+      def assign_pins(ivars, view_class)
         return [] if ivars.empty?
 
         # A bodyless method gives the copies an instance binder in the view class
         holder = Solargraph::Pin::Method.new(
-          name: '__assigns', closure: view_class, scope: :instance, visibility: :private, location: controller.location
+          name: '__assigns', closure: view_class, scope: :instance, visibility: :private, location: view_class.location
         )
-        callbacks = callback_names(source_map.source)
-        [holder, *ivars.map do |ivar|
+        [holder, *ivars.map do |ivar, callback|
           Assign.new(
-            origins: [ivar], callback: callbacks.include?(ivar.closure&.name), name: ivar.name, closure: holder,
+            origins: [ivar], callback: callback, name: ivar.name, closure: holder,
             location: ivar.location, comments: ivar.comments
           )
         end]
+      end
+
+      # @param controller [String]
+      # @param pins [Array<Solargraph::Pin::Base>] the pins of the controller's file
+      # @param source [Solargraph::Source]
+      # @return [Array<Array(Solargraph::Pin::InstanceVariable, Boolean)>] each with whether a callback assigns it
+      def controller_ivars(controller, pins, source)
+        callbacks = callback_names(source)
+        pins.filter_map do |pin|
+          next unless pin.is_a?(Solargraph::Pin::InstanceVariable) && pin.scope == :instance &&
+                      pin.binder.namespace == controller
+
+          [pin, callbacks.include?(pin.closure&.name)]
+        end
       end
 
       # @param source [Solargraph::Source] a controller's source
