@@ -17,3 +17,4 @@ spec/rails7/tmp/
 Gemfile.lock
 /.Gemfile
 vendor
+/gemfiles/*.lock
