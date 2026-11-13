@@ -71,6 +71,25 @@ RSpec.describe Solargraph::Rails::Views, :herb do
     expect(definitions(layout, 1, 'page_title')).to be_empty
   end
 
+  describe 'partial locals' do
+    it 'declares strict locals as locals defined in the magic comment' do
+      pin = definitions('app/views/posts/_card.html.erb', 1, 'post').first
+
+      expect(pin.name).to eq('post')
+      expect(pin.location.filename).to eq(File.join(root, 'app/views/posts/_card.html.erb'))
+      expect([pin.location.range.start.line, pin.location.range.start.character]).to eq([0, 13])
+    end
+
+    it 'types a strict local with a default value from the default' do
+      expect(definitions('app/views/posts/_card.html.erb', 1, 'compact').first.return_type.to_s).to eq('Boolean')
+    end
+
+    it 'still runs a partial with a malformed strict locals comment in its view class' do
+      expect(definitions('app/views/posts/_broken.html.erb', 1, 'link_to').first&.path)
+        .to eq('ActionView::Helpers::UrlHelper#link_to')
+    end
+  end
+
   it 'does not resolve view helpers at the top level of a Ruby file' do
     %w[link_to post_title current_user].each_with_index do |helper, line|
       expect(definitions('lib/plain.rb', line, helper)).to be_empty, helper

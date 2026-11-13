@@ -23,6 +23,7 @@ require_relative 'solargraph/rails/mounted_helpers'
 require_relative 'solargraph/rails/routes'
 require_relative 'solargraph/rails/route_helpers'
 require_relative 'solargraph/rails/views'
+require_relative 'solargraph/rails/partials'
 require_relative 'solargraph/rails/version'
 
 module Solargraph

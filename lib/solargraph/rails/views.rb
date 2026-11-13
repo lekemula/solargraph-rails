@@ -94,7 +94,7 @@ module Solargraph
         view_class = Solargraph::Pin::Namespace.new(
           name: view_class_for(source.filename), closure: Solargraph::Pin::ROOT_PIN
         )
-        Solargraph::Pin::Method.new(
+        render = Solargraph::Pin::Method.new(
           name: '__render',
           closure: view_class,
           scope: :instance,
@@ -102,6 +102,8 @@ module Solargraph
           location: source.location,
           node: source.node
         )
+        render.parameters.concat Partials.instance.parameters(source, render)
+        render
       end
 
       # @param source_map [Solargraph::SourceMap]
