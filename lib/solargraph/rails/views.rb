@@ -8,8 +8,10 @@ module Solargraph
     #   PostsControllerView < ApplicationControllerView < ActionView::Base
     #
     # The root view class includes every app helper module. A view under `app/views/posts/` runs in
-    # `PostsControllerView#__render`; a view with no matching controller (layouts, shared partials, mailer views)
-    # runs in `ApplicationControllerView#__render`.
+    # `PostsControllerView#__render`. A partial outside a controller's folder runs for the controllers whose views or
+    # actions render it, directly or through other partials: in that controller's view class, or in a view class of
+    # its own holding all their instance variables when there are several. Any other view (layouts, unrendered
+    # partials, mailer views) runs in `ApplicationControllerView#__render`.
     class Views
       ROOT_VIEW_CLASS = 'ApplicationControllerView'.freeze
       BASE_CONTROLLERS = %w[ActionController::Base ActionController::API].freeze
@@ -112,14 +114,15 @@ module Solargraph
         return Solargraph::Environ.new unless self.class.supported?
 
         Partials.instance.observe(source_map.source)
-        return view_environ if self.class.view?(source_map.filename) && source_map.source.transformed?
+        return view_environ(source_map.filename) if self.class.view?(source_map.filename) && source_map.source.transformed?
         return controller_environ(source_map) if source_map.filename.to_s.include?('/app/controllers/')
 
         Solargraph::Environ.new
       end
 
-      # The `helper_method` targets of a view class's controller, as methods of the view class. A target may be
-      # defined in a parent controller or a concern, so it is looked up on the controller when methods are queried.
+      # The `helper_method` targets of a view class's controller, or of the controllers a partial's view class renders
+      # for, as methods of the view class. A target may be defined in a parent controller or a concern, so it is
+      # looked up on the controller when methods are queried.
       #
       # @param api_map [Solargraph::ApiMap]
       # @param rooted_tag [String]
@@ -128,13 +131,14 @@ module Solargraph
       def object(api_map, rooted_tag, scope)
         return [] unless self.class.supported? && scope == :instance
 
-        fqns = rooted_tag.delete_prefix('::').split('<').first
-        return [] unless fqns&.end_with?('ControllerView')
+        fqns = rooted_tag.delete_prefix('::').split('<').first.to_s
+        controllers = fqns.end_with?('ControllerView') ? [fqns.delete_suffix('View')] : partial_controllers[fqns]
+        return [] unless controllers
 
         view_class = api_map.get_path_pins(fqns).find { |pin| pin.is_a?(Solargraph::Pin::Namespace) }
         return [] unless view_class
 
-        helper_method_pins(api_map, fqns.delete_suffix('View'), view_class)
+        controllers.flat_map { |controller| helper_method_pins(api_map, controller, view_class) }
       end
 
       private
@@ -159,6 +163,11 @@ module Solargraph
             parameters: target.parameters
           )
         end
+      end
+
+      # @return [Hash{String => Array<String>}] the controllers each partial view class renders for
+      def partial_controllers
+        @partial_controllers ||= {}
       end
 
       # Names a controller declares with `helper_method`, in its own body or in the modules it includes. Those of its
@@ -196,9 +205,40 @@ module Solargraph
         names
       end
 
+      # @param filename [String]
       # @return [Solargraph::Environ]
-      def view_environ
-        Solargraph::Environ.new(requires: %w[action_view action_controller])
+      def view_environ(filename)
+        Solargraph::Environ.new(requires: %w[action_view action_controller], pins: partial_view_class_pins(filename))
+      end
+
+      # A partial rendered for several controllers runs in a view class of its own, holding all their instance
+      # variables. A class has one superclass and Solargraph looks instance variables up its superclasses only, so
+      # it copies them, like a controller's view class does.
+      #
+      # @param filename [String]
+      # @return [Array<Solargraph::Pin::Base>]
+      def partial_view_class_pins(filename)
+        return [] if folder_controller(filename)
+
+        controllers = renderer_controllers(filename)
+        return [] if controllers.size < 2
+
+        view_class = Solargraph::Pin::Namespace.new(
+          name: partial_view_class(filename), closure: Solargraph::Pin::ROOT_PIN,
+          location: Solargraph::Location.new(filename, Solargraph::Range.from_to(0, 0, 0, 0))
+        )
+        partial_controllers[view_class.path] = controllers
+        superclass = Solargraph::Pin::Reference::Superclass.new(name: ROOT_VIEW_CLASS, closure: view_class)
+        ivars = controllers.flat_map { |controller| ivars_of(app_root(filename, 'app/views'), controller) }
+        [view_class, superclass, *assign_pins(ivars, view_class)]
+      end
+
+      # @param filename [String] a partial, e.g. app/views/shared/_flash.html.erb
+      # @return [String] e.g. 'SharedFlashPartialView'
+      def partial_view_class(filename)
+        root = app_root(filename, 'app/views')
+        dir, base = File.split(filename.delete_prefix(File.join(root, 'app/views/')))
+        "#{File.join(dir, base.delete_prefix('_').split('.').first).camelize.delete(':')}PartialView"
       end
 
       # @param source_map [Solargraph::SourceMap]
@@ -253,7 +293,8 @@ module Solargraph
       # @param view_class [Solargraph::Pin::Namespace]
       # @return [Array<Solargraph::Pin::Base>]
       def assigns(source_map, controller, view_class)
-        assign_pins(controller_ivars(controller.path, source_map.pins, source_map.source), view_class)
+        ivars = recorded_ivars[controller.path] = controller_ivars(controller.path, source_map.pins, source_map.source)
+        assign_pins(ivars, view_class)
       end
 
       # @param ivars [Array<Array(Solargraph::Pin::InstanceVariable, Boolean)>] each with whether a callback assigns it
@@ -288,6 +329,29 @@ module Solargraph
         end
       end
 
+      # The instance variables of each controller, as its last source map found them, for the view classes of the
+      # partials its views render.
+      #
+      # @return [Hash{String => Array<Array(Solargraph::Pin::InstanceVariable, Boolean)>}]
+      def recorded_ivars
+        @recorded_ivars ||= {}
+      end
+
+      # A controller's instance variables, from its last source map or, before it is mapped, from its file.
+      #
+      # @param root [String]
+      # @param controller [String]
+      # @return [Array<Array(Solargraph::Pin::InstanceVariable, Boolean)>]
+      def ivars_of(root, controller)
+        recorded_ivars.fetch(controller) do
+          file = File.join(root, 'app/controllers', "#{controller.underscore}.rb")
+          next [] unless File.exist?(file)
+
+          source = Solargraph::Source.load(file)
+          recorded_ivars[controller] = controller_ivars(controller, Solargraph::Parser.map(source).first, source)
+        end
+      end
+
       # @param source [Solargraph::Source] a controller's source
       # @return [Array<String>] the methods its before_action callbacks name
       def callback_names(source)
@@ -315,16 +379,47 @@ module Solargraph
         end
       end
 
-      # app/views/admin/posts/show.html.erb runs in Admin::PostsControllerView, when the app has that controller.
+      # app/views/admin/posts/show.html.erb runs in Admin::PostsControllerView, when the app has that controller. A
+      # partial outside a controller's folder runs in the view class of the controller whose views render it, or in a
+      # view class of its own when several controllers' views do (see #partial_view_class_pins).
       #
       # @param filename [String]
       # @return [String]
       def view_class_for(filename)
+        controller = folder_controller(filename)
+        return self.class.view_class(controller) if controller
+
+        controllers = renderer_controllers(filename)
+        return ROOT_VIEW_CLASS if controllers.empty?
+        return self.class.view_class(controllers.first) if controllers.one?
+
+        partial_view_class(filename)
+      end
+
+      # @param filename [String] a view
+      # @return [String, nil] the controller whose folder the view is in, e.g. 'Admin::PostsController'
+      def folder_controller(filename)
         root = app_root(filename, 'app/views')
         dir = File.dirname(filename.delete_prefix(File.join(root, 'app/views/')))
-        return ROOT_VIEW_CLASS unless File.exist?(File.join(root, 'app/controllers', "#{dir}_controller.rb"))
+        "#{dir}_controller".camelize if File.exist?(File.join(root, 'app/controllers', "#{dir}_controller.rb"))
+      end
 
-        self.class.view_class("#{dir}_controller".camelize)
+      # The controllers a partial outside a controller's folder renders for: those whose views or actions render it,
+      # directly or through other such partials.
+      #
+      # @param filename [String] a view
+      # @param seen [Set<String>] the views already followed
+      # @return [Array<String>]
+      def renderer_controllers(filename, seen = Set[filename])
+        return [] unless Partials.partial?(filename)
+
+        Partials.instance.renderers(filename).flat_map do |renderer|
+          next [] unless seen.add?(renderer)
+          next [renderer.split('/app/controllers/').last.delete_suffix('.rb').camelize] unless self.class.view?(renderer)
+
+          controller = folder_controller(renderer)
+          controller ? [controller] : renderer_controllers(renderer, seen)
+        end.uniq.sort
       end
 
       # @param filename [String]

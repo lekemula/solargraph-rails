@@ -122,6 +122,12 @@ module Solargraph
         end
       end
 
+      # @param filename [String] a partial
+      # @return [Array<String>] the views and controllers that render it
+      def renderers(filename)
+        renders_of(filename).map { |_, site| site.location.filename }.uniq
+      end
+
       # Indexes the `render` calls of a view or controller.
       #
       # @param source [Solargraph::Source]
@@ -166,15 +172,20 @@ module Solargraph
       # @param filename [String] a partial
       # @return [Hash{String => Array<CallSite>}]
       def call_sites(filename)
+        renders_of(filename).select(&:first).group_by(&:first).transform_values { |matches| matches.map(&:last) }
+      end
+
+      # @param filename [String] a partial
+      # @return [Array<Array(String, CallSite)>] the local name and call site of each local its renders pass
+      def renders_of(filename)
         root, path = split_view(filename)
         seed(root)
         renders = @mutex.synchronize do
           @renders.select { |file, _| file.start_with?("#{root}/") }.values.flat_map(&:last)
         end
         renders.select { |target, _, _| target == path }
-               .sort_by { |_, _, site| [site.location.filename, site.location.range.start.line] }
-               .group_by { |_, name, _| name }
-               .transform_values { |matches| matches.map(&:last) }
+               .map { |_, name, site| [name, site] }
+               .sort_by { |_, site| [site.location.filename, site.location.range.start.line] }
       end
 
       # @param filename [String]
@@ -251,7 +262,7 @@ module Solargraph
       # @param dir [String]
       # @param node [::Parser::AST::Node]
       # @param controller [Boolean]
-      # @return [Array<Array(String, String, CallSite)>]
+      # @return [Array<Array(String, String, CallSite)>] with a nil local name for the render itself
       def render_locals(filename, dir, node, controller)
         first, second = node.children[2..]
         return [] if first.nil? || (controller && first.type == :str)
@@ -272,7 +283,8 @@ module Solargraph
         return [] unless path
 
         variable = (options[:as] && name_of(options[:as])) || local_name(path)
-        locals = hash_locals(filename, options[:locals])
+        locals = [[nil, CallSite.new(Solargraph::Location.new(filename, Solargraph::Range.from_node(node)), node)]]
+        locals += hash_locals(filename, options[:locals])
         locals += object_locals(filename, object, variable, collection) if object
         locals.map { |name, site| [path, name, site] }
       end

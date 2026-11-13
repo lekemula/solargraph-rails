@@ -187,4 +187,56 @@ RSpec.describe Solargraph::Rails::Views, :herb do
     expect(definitions(layout, 2, '@locale').first&.return_type.to_s).to eq('Symbol')
     expect(definitions(layout, 2, '@post')).to be_empty
   end
+
+  describe 'shared partials' do
+    it 'gives a shared partial the ivars of the controller whose views render it' do
+      pin = definitions('app/views/shared/_flash.html.erb', 0, '@post').first
+
+      expect(pin&.return_type.to_s).to eq('Post')
+      expect(pin.location.filename).to eq(File.join(root, 'app/controllers/posts_controller.rb'))
+    end
+
+    it 'gives a shared partial the ivars of every controller whose views render it' do
+      flash = 'app/views/shared/_flash.html.erb'
+
+      expect(definitions(flash, 0, '@post').first&.return_type.to_s).to eq('Post')
+      expect(definitions(flash, 0, '@comment').first&.return_type.to_s).to eq('Comment')
+    end
+
+    it 'follows renders through other shared partials, cycles included' do
+      badge = 'app/views/shared/_badge.html.erb'
+
+      expect(definitions(badge, 0, '@post').first&.return_type.to_s).to eq('Post')
+      expect(definitions(badge, 0, '@comment').first&.return_type.to_s).to eq('Comment')
+    end
+
+    it 'gives a shared partial the ivars of the controller whose action renders it' do
+      expect(definitions('app/views/shared/_draft.html.erb', 0, '@draft').first&.return_type.to_s).to eq('Post')
+    end
+
+    it 'reads the ivars of the controllers that render a shared partial from disk before they are mapped' do
+      allow(described_class).to receive(:instance).and_return(described_class.new)
+      source_map = Solargraph::SourceMap.map(Solargraph::Source.load(File.join(root, 'app/views/shared/_flash.html.erb')))
+
+      expect(source_map.all_pins.grep(Solargraph::Pin::InstanceVariable).map(&:name))
+        .to include('@post', '@comment')
+    end
+
+    it 'gives a shared partial nothing renders the application controller\'s ivars only' do
+      orphan = 'app/views/shared/_orphan.html.erb'
+
+      expect(definitions(orphan, 0, '@locale').first&.return_type.to_s).to eq('Symbol')
+      expect(definitions(orphan, 0, '@post')).to be_empty
+    end
+
+    it 'resolves helpers and the helper methods of the controllers whose views render a shared partial' do
+      flash = 'app/views/shared/_flash.html.erb'
+
+      expect(definitions(flash, 0, 'post_title').first&.path).to eq('PostsHelper#post_title')
+      expect(definitions(flash, 0, 'current_user').first&.location&.filename)
+        .to eq(File.join(root, 'app/controllers/concerns/authentication.rb'))
+      expect(definitions(flash, 2, 'page_title').first&.location&.filename)
+        .to eq(File.join(root, 'app/controllers/posts_controller.rb'))
+    end
+  end
 end
