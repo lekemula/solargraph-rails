@@ -8,10 +8,47 @@ module Solargraph
     # The call sites come from an index of the `render` calls in each view and controller. It is filled from disk when
     # a partial is first mapped, so it does not depend on the order files are mapped in, and kept fresh by every
     # source map of a view or controller (see Views#local).
+    #
+    # A partial is also the definition of the names `render` calls give it (see #targets).
     class Partials
       # ActionView::Template::STRICT_LOCALS_REGEX
       STRICT_LOCALS = /\#\s+locals:\s+\((.*)\)/.freeze
       NAME_TYPES = %i[sym str].freeze
+
+      # The `render` parameters that name a partial, as [method namespace, parameter name, decl]. Views call
+      # ActionView::Helpers::RenderingHelper#render(options = {}, locals = {}), where `render "x", post: post` and
+      # `render partial: "x"` both pass the name in options. Controllers resolve `render(*args)` to
+      # ActionController::Instrumentation (an anonymous splat) or, depending on the Rails version, to
+      # ActionController::Rendering or AbstractController::Rendering.
+      RENDER_PARAMETERS = [
+        ['ActionView::Helpers::RenderingHelper', 'options', :optarg],
+        ['ActionController::Instrumentation', '', :restarg],
+        ['ActionController::Rendering', 'args', :restarg],
+        ['AbstractController::Rendering', 'args', :restarg]
+      ].freeze
+
+      # Solargraph < 0.61 has no factory parameters
+      if defined?(Solargraph::Pin::FactoryParameter)
+        # A partial as the definition of a name `render` gives it. A name without a slash is relative to the folder
+        # of the view or controller that renders it, so it is visible from that folder only.
+        class Target < Solargraph::Pin::FactoryParameter
+          # @param dir [String, nil] the folder a relative name is looked up in, e.g. 'posts'; nil for a full name
+          # @param splat [Hash{Symbol => Object}] Pin::FactoryParameter attributes
+          def initialize(dir: nil, **splat)
+            super(**splat)
+            @dir = dir
+          end
+
+          # @param closure [Solargraph::Pin::Base]
+          # @return [Boolean]
+          def visible_from?(closure)
+            return true if @dir.nil?
+
+            filename = closure.location&.filename
+            !filename.nil? && Partials.lookup_dir(filename) == @dir
+          end
+        end
+      end
 
       # The expression a `render` passes as a partial's local.
       class CallSite
@@ -94,6 +131,15 @@ module Solargraph
         File.basename(filename).start_with?('_')
       end
 
+      # Whether Solargraph can go to definitions from literals relative to their caller.
+      #
+      # @return [Boolean]
+      def self.targets_supported?
+        return false unless defined?(Solargraph::Pin::FactoryParameter)
+
+        Solargraph::Pin::FactoryParameter.method_defined?(:visible_from?)
+      end
+
       # The directory a partial name without a slash is looked up in: the view's, or the controller's
       # `controller_path`. Rails looks there first (ActionView::PartialRenderer#find_template uses the lookup
       # context's prefixes for a name without a slash); the prefixes of parent controllers are not followed.
@@ -140,6 +186,25 @@ module Solargraph
       # @return [Array<String>] the views and controllers that render it
       def renderers(filename)
         renders_of(filename).map { |_, site| site.location.filename }.uniq
+      end
+
+      # The partial as the definition, at its first line, of its full name (`"posts/summary"`) and of its name
+      # relative to its folder (`"summary"`), in every `render` that can name it.
+      #
+      # @param filename [String] a partial
+      # @return [Array<Target>]
+      def targets(filename)
+        return [] unless self.class.partial?(filename) && self.class.targets_supported?
+
+        path = split_view(filename).last
+        folder, name = File.split(path)
+        location = Solargraph::Location.new(filename, Solargraph::Range.from_to(0, 0, 0, 0))
+        [[path, nil], [name, folder]].product(RENDER_PARAMETERS).map do |(value, dir), (namespace, param, decl)|
+          Target.new(
+            dir: dir, method_name: 'render', method_namespace: namespace, method_scope: :instance,
+            param_name: param, value: value, decl: decl, return_type: nil, location: location
+          )
+        end
       end
 
       # Indexes the `render` calls of a view or controller.

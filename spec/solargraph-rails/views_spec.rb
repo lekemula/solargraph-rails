@@ -224,6 +224,87 @@ RSpec.describe Solargraph::Rails::Views, :herb do
     expect(definitions(layout, 26, '@post')).to be_empty
   end
 
+  describe 'partial definitions' do
+    # @param relpath [String]
+    # @param line [Integer] 0-based
+    # @param needle [String]
+    # @return [Array<Array(String, Integer)>] the file, relative to the app, and 0-based line of each definition
+    def partials(relpath, line, needle)
+      definitions(relpath, line, needle).map do |pin|
+        [pin.location.filename.delete_prefix("#{root}/"), pin.location.range.start.line]
+      end
+    end
+
+    let(:summary) { [['app/views/posts/_summary.html.erb', 0]] }
+
+    it 'goes to the partial a render names' do
+      expect(partials('app/views/posts/links.html.erb', 0, 'posts/summary')).to eq(summary)
+    end
+
+    it 'goes to the partial a render passing locals names' do
+      expect(partials('app/views/posts/links.html.erb', 1, 'posts/card')).to eq([['app/views/posts/_card.html.erb', 0]])
+    end
+
+    it 'goes to the partial of a render with partial: and locals:' do
+      expect(partials('app/views/posts/links.html.erb', 2, 'posts/summary')).to eq(summary)
+    end
+
+    it 'goes to the partial of a relative name in the rendering view\'s folder' do
+      expect(partials('app/views/posts/links.html.erb', 3, 'summary')).to eq(summary)
+    end
+
+    it 'goes to the partial of the same relative name in another folder\'s own folder' do
+      expect(partials('app/views/comments/index.html.erb', 2, 'summary'))
+        .to eq([['app/views/comments/_summary.html.erb', 0]])
+    end
+
+    it 'goes to a shared partial' do
+      expect(partials('app/views/posts/show.html.erb', 5, 'shared/flash'))
+        .to eq([['app/views/shared/_flash.html.erb', 0]])
+    end
+
+    it 'goes to a partial from a controller' do
+      expect(partials('app/controllers/previews_controller.rb', 2, 'posts/summary')).to eq(summary)
+    end
+
+    it 'goes to the partial of a relative name in a controller\'s controller_path' do
+      expect(partials('app/controllers/comments_controller.rb', 6, 'summary'))
+        .to eq([['app/views/comments/_summary.html.erb', 0]])
+    end
+
+    it 'goes to a partial of another format' do
+      expect(partials('app/views/posts/links.html.erb', 5, 'posts/stream'))
+        .to eq([['app/views/posts/_stream.turbo_stream.erb', 0]])
+    end
+
+    it 'goes nowhere from a name no partial has' do
+      expect(partials('app/views/posts/links.html.erb', 6, 'posts/missing')).to be_empty
+    end
+
+    it 'goes nowhere from other strings of a render' do
+      expect(partials('app/views/posts/links.html.erb', 7, 'admin')).to be_empty
+    end
+
+    it 'goes to a partial created after the library is loaded, and nowhere once it is deleted' do
+      fresh = File.join(root, 'app/views/posts/_fresh.html.erb')
+      expect(partials('app/views/posts/links.html.erb', 8, 'posts/fresh')).to be_empty
+
+      File.write(fresh, "<p>Fresh</p>\n")
+      library.create_from_disk(fresh)
+      library.catalog
+      expect(partials('app/views/posts/links.html.erb', 8, 'posts/fresh'))
+        .to eq([['app/views/posts/_fresh.html.erb', 0]])
+
+      FileUtils.rm_f(fresh)
+      library.delete(fresh)
+      library.catalog
+      expect(partials('app/views/posts/links.html.erb', 8, 'posts/fresh')).to be_empty
+    ensure
+      FileUtils.rm_f(fresh)
+      library.delete(fresh)
+    end
+  end
+
   describe 'shared partials' do
     it 'gives a shared partial the ivars of the controller whose views render it' do
       pin = definitions('app/views/shared/_flash.html.erb', 0, '@post').first

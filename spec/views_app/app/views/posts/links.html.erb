@@ -1,0 +1,9 @@
+<%= render "posts/summary" %>
+<%= render "posts/card", post: Post.new, compact: true %>
+<%= render partial: "posts/summary", locals: { post: Post.new } %>
+<%= render "summary" %>
+<%= render "shared/flash" %>
+<%= render "posts/stream" %>
+<%= render "posts/missing" %>
+<%= render partial: "posts/summary", layout: "admin" %>
+<%= render "posts/fresh" %>
