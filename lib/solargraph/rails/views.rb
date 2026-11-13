@@ -66,7 +66,76 @@ module Solargraph
         Solargraph::Environ.new
       end
 
+      # The `helper_method` targets of a view class's controller, as methods of the view class. A target may be
+      # defined in a parent controller or a concern, so it is looked up on the controller when methods are queried.
+      #
+      # @param api_map [Solargraph::ApiMap]
+      # @param rooted_tag [String]
+      # @param scope [Symbol]
+      # @return [Array<Solargraph::Pin::Method>]
+      def object(api_map, rooted_tag, scope)
+        return [] unless self.class.supported? && scope == :instance
+
+        fqns = rooted_tag.delete_prefix('::').split('<').first
+        return [] unless fqns&.end_with?('ControllerView')
+
+        view_class = api_map.get_path_pins(fqns).find { |pin| pin.is_a?(Solargraph::Pin::Namespace) }
+        return [] unless view_class
+
+        controller = fqns.delete_suffix('View')
+        helper_method_names(api_map, controller).filter_map do |name|
+          target = api_map.get_method_stack(controller, name).first
+          next unless target.is_a?(Solargraph::Pin::Method)
+
+          Solargraph::Pin::Method.new(
+            name: name,
+            closure: view_class,
+            scope: :instance,
+            visibility: :public,
+            location: target.location,
+            comments: target.comments,
+            node: target.node,
+            parameters: target.parameters
+          )
+        end
+      end
+
       private
+
+      # Names a controller declares with `helper_method`, in its own body or in the modules it includes. Those of its
+      # parent controllers belong to the parent's view class.
+      #
+      # @param api_map [Solargraph::ApiMap]
+      # @param controller [String]
+      # @return [Array<String>]
+      def helper_method_names(api_map, controller)
+        namespaces = [controller, *api_map.get_includes(controller).map { |include| api_map.dereference(include) }]
+        filenames = namespaces.compact.flat_map do |namespace|
+          api_map.get_path_pins(namespace).filter_map { |pin| pin.location&.filename }
+        end
+        filenames.uniq.select { |filename| api_map.bundled?(filename) }.flat_map do |filename|
+          scan_helper_methods(api_map.source_map(filename).source)
+        end.uniq
+      end
+
+      # @param source [Solargraph::Source]
+      # @return [Array<String>]
+      def scan_helper_methods(source)
+        return [] unless source.code.include?('helper_method')
+
+        @helper_methods ||= {}
+        cached = @helper_methods[source.filename]
+        return cached[1] if cached && cached[0] == source.code
+
+        names = []
+        walker = Walker.from_source(source)
+        walker.on :send, [nil, :helper_method] do |ast|
+          ast.children[2..].each { |arg| names << arg.children[0].to_s if arg.type == :sym }
+        end
+        walker.walk
+        @helper_methods[source.filename] = [source.code, names]
+        names
+      end
 
       # @return [Solargraph::Environ]
       def view_environ

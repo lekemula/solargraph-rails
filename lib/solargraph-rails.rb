@@ -113,6 +113,7 @@ module Solargraph
       def object(api_map, rooted_tag, scope, _visibility, _deep, _skip, _no_core)
         pins = run_feature { MountedHelpers.instance.object(api_map, rooted_tag, scope) }
         pins += run_feature { Routes.instance.object(api_map, rooted_tag, scope) }
+        pins += run_feature { Views.instance.object(api_map, rooted_tag, scope) }
         pins.empty? ? EMPTY_ENVIRON : Solargraph::Environ.new(pins: pins)
       end
 

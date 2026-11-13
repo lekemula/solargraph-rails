@@ -41,10 +41,33 @@ RSpec.describe Solargraph::Rails::Views, :herb do
     expect(pin.documentation).to include('The title of a post')
   end
 
+  it 'resolves helper_method targets declared in a concern of a parent controller' do
+    pin = definitions('app/views/posts/show.html.erb', 2, 'current_user').first
+
+    expect(pin.name).to eq('current_user')
+    expect(pin.location.filename).to eq(File.join(root, 'app/controllers/concerns/authentication.rb'))
+    expect(pin.location.range.start.line).to eq(10)
+    expect(pin.return_type.to_s).to eq('User')
+  end
+
+  it 'resolves helper_method targets declared in the view\'s controller' do
+    pin = definitions('app/views/posts/show.html.erb', 2, 'page_title').first
+
+    expect(pin.name).to eq('page_title')
+    expect(pin.location.filename).to eq(File.join(root, 'app/controllers/posts_controller.rb'))
+  end
+
+  it 'does not expose controller methods that are not helper methods' do
+    expect(definitions('app/views/posts/show.html.erb', 3, 'load_comments')).to be_empty
+  end
+
   it 'runs views with no matching controller in the application controller\'s view class' do
     layout = 'app/views/layouts/application.html.erb'
 
+    expect(definitions(layout, 1, 'current_user').first&.location&.filename)
+      .to eq(File.join(root, 'app/controllers/concerns/authentication.rb'))
     expect(definitions(layout, 1, 'link_to').first&.path).to eq('ActionView::Helpers::UrlHelper#link_to')
+    expect(definitions(layout, 1, 'page_title')).to be_empty
   end
 
   it 'does not resolve view helpers at the top level of a Ruby file' do
