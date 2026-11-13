@@ -21,6 +21,7 @@ require_relative 'solargraph/rails/engine'
 require_relative 'solargraph/rails/load_hooks'
 require_relative 'solargraph/rails/mounted_helpers'
 require_relative 'solargraph/rails/routes'
+require_relative 'solargraph/rails/route_helpers'
 require_relative 'solargraph/rails/version'
 
 module Solargraph
@@ -60,8 +61,9 @@ module Solargraph
         environ = Solargraph::Environ.new
         Puma.instance.add_dsl(environ, basename)
         Importmap.instance.add_dsl(environ, basename)
+        route_helpers = run_environ { RouteHelpers.instance.local(source_map) }
 
-        return environ unless ns.is_a?(Solargraph::Pin::Namespace)
+        return environ.merge(route_helpers) unless ns.is_a?(Solargraph::Pin::Namespace)
 
         pins += run_feature { Schema.instance.process(source_map, ns) }
         pins += run_feature { Annotate.instance.process(source_map, ns) }
@@ -75,7 +77,7 @@ module Solargraph
 
         environ = Solargraph::Environ.new(pins: pins)
         Puma.instance.add_dsl(environ, basename)
-        environ
+        environ.merge(route_helpers)
       end
 
       # @param root [String] the gem's root directory
@@ -115,6 +117,16 @@ module Solargraph
           error.message + "\n" + Array(error.backtrace).join("\n")
         )
         []
+      end
+
+      # @yieldreturn [Solargraph::Environ]
+      #
+      # @return [Solargraph::Environ]
+      def run_environ
+        yield
+      rescue => error
+        Solargraph.logger.warn(error.full_message(highlight: false))
+        Solargraph::Environ.new
       end
     end
   end
