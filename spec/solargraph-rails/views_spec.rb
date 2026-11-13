@@ -84,9 +84,64 @@ RSpec.describe Solargraph::Rails::Views, :herb do
       expect(definitions('app/views/posts/_card.html.erb', 1, 'compact').first.return_type.to_s).to eq('Boolean')
     end
 
+    it 'types a strict local from the call sites that pass it' do
+      expect(definitions('app/views/posts/_card.html.erb', 1, 'post').first.return_type.to_s).to eq('Post')
+    end
+
+    it 'ignores locals a call site passes that the strict locals do not declare' do
+      expect(definitions('app/views/posts/_card.html.erb', 2, 'ignored')).to be_empty
+    end
+
+    it 'declares the locals every call site passes with locals:' do
+      controller = File.join(root, 'app/controllers/previews_controller.rb')
+      post, author = %w[post author].map { |name| definitions('app/views/posts/_summary.html.erb', 0, name).first }
+
+      expect(post.return_type.to_s).to eq('Post')
+      expect(author.return_type.to_s).to eq('User')
+      expect(author.location.filename).to eq(controller)
+      expect([author.location.range.start.line, author.location.range.start.character])
+        .to eq([2, File.readlines(controller)[2].index('author:')])
+      expect(post.location.filename).to eq(File.join(root, 'app/views/posts/feed.html.erb'))
+    end
+
+    it 'declares the element, counter and iteration of a rendered collection' do
+      partial = 'app/views/posts/_post.html.erb'
+      types = %w[post post_counter post_iteration].map do |name|
+        definitions(partial, 0, name).first&.return_type.to_s
+      end
+
+      expect(types).to eq(%w[Post Integer ActionView::PartialIteration])
+      expect(definitions(partial, 0, 'post').first.location.filename).to eq(File.join(root, 'app/views/posts/feed.html.erb'))
+    end
+
+    it 'renders a collection at the partial path its elements are named after' do
+      partial = 'app/views/comments/_comment.html.erb'
+
+      expect(definitions(partial, 0, 'comment').first.location.range.start.line).to eq(2)
+      expect(definitions(partial, 0, 'comment_counter')).not_to be_empty
+    end
+
+    it 'gives a view that is not a partial no locals' do
+      expect(definitions('app/views/posts/index.html.erb', 1, 'post')).to be_empty
+    end
+
     it 'still runs a partial with a malformed strict locals comment in its view class' do
       expect(definitions('app/views/posts/_broken.html.erb', 1, 'link_to').first&.path)
         .to eq('ActionView::Helpers::UrlHelper#link_to')
+    end
+
+    it 'types the locals of a partial that renders itself from its other call sites' do
+      expect(definitions('app/views/posts/_tree.html.erb', 0, 'node').first.return_type.to_s).to eq('Integer')
+    end
+
+    it 'indexes the call sites of a view again when it changes' do
+      feed = File.join(root, 'app/views/posts/feed.html.erb')
+      partial = Solargraph::Source.load(File.join(root, 'app/views/posts/_tree.html.erb'))
+
+      Solargraph::Rails::Partials.instance.observe(Solargraph::Source.load_string('<%= render "tree", depth: 1 %>', feed))
+      expect(described_class.instance.source_closure(partial).parameters.map(&:name)).to include('depth')
+    ensure
+      Solargraph::Rails::Partials.instance.observe(Solargraph::Source.load(feed))
     end
   end
 

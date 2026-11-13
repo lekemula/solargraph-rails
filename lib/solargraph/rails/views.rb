@@ -110,6 +110,8 @@ module Solargraph
       # @return [Solargraph::Environ]
       def local(source_map)
         return Solargraph::Environ.new unless self.class.supported?
+
+        Partials.instance.observe(source_map.source)
         return view_environ if self.class.view?(source_map.filename) && source_map.source.transformed?
         return controller_environ(source_map) if source_map.filename.to_s.include?('/app/controllers/')
 

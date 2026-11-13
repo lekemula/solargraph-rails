@@ -5,4 +5,9 @@ module PostsHelper
   def post_title(post)
     post.to_s
   end
+
+  # @return [Array<Post>]
+  def posts
+    [Post.new]
+  end
 end
