@@ -2,3 +2,4 @@
 <p><%= link_to "Back", "/posts" %></p>
 <p><%= current_user.name %> — <%= page_title %></p>
 <% load_comments %>
+<p><%= @post.title %> <%= @comments.first %> <%= @locale %></p>

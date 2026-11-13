@@ -14,6 +14,40 @@ module Solargraph
       ROOT_VIEW_CLASS = 'ApplicationControllerView'.freeze
       BASE_CONTROLLERS = %w[ActionController::Base ActionController::API].freeze
 
+      # A controller instance variable copied into its view class. It keeps the assignment's location, and infers
+      # its type in the controller, where methods like a private `load_comments` exist.
+      class Assign < Solargraph::Pin::InstanceVariable
+        # @return [Array<Solargraph::Pin::InstanceVariable>] the controller's instance variables this copies
+        attr_reader :origins
+
+        # @param origins [Array<Solargraph::Pin::InstanceVariable>]
+        # @param splat [Hash] the instance variable's attributes
+        def initialize(origins: [], **splat)
+          super(**splat)
+          @origins = origins
+        end
+
+        # Solargraph merges every assignment a reference can see into one pin, which must keep all their origins.
+        #
+        # @param other [Solargraph::Pin::InstanceVariable]
+        # @param attrs [Hash]
+        # @return [Solargraph::Pin::InstanceVariable]
+        def combine_with(other, attrs = {})
+          super(other, attrs.merge(origins: origins + (other.is_a?(Assign) ? other.origins : [other])))
+        end
+
+        # @param api_map [Solargraph::ApiMap]
+        # @return [Solargraph::ComplexType]
+        def probe(api_map)
+          return super if origins.empty?
+
+          types = origins.map { |origin| origin.probe(api_map) }.reject(&:undefined?)
+          return Solargraph::ComplexType::UNDEFINED if types.empty?
+
+          Solargraph::ComplexType.new(types.flat_map(&:items).uniq)
+        end
+      end
+
       # Whether Solargraph can bind a transformed source to a closure.
       #
       # @return [Boolean]
@@ -169,22 +203,44 @@ module Solargraph
         superclass = source_map.pins.find do |pin|
           pin.is_a?(Solargraph::Pin::Reference::Superclass) && pin.closure == controller
         end
-        if superclass.nil? || BASE_CONTROLLERS.include?(superclass.name.delete_prefix('::'))
-          [
-            view_class,
-            Solargraph::Pin::Reference::Superclass.new(name: '::ActionView::Base', closure: view_class),
-            *helper_modules(source_map.filename).map do |name|
-              Solargraph::Pin::Reference::Include.new(name: name, closure: view_class)
-            end
-          ]
-        else
-          [
-            view_class,
-            Solargraph::Pin::Reference::Superclass.new(
-              name: self.class.view_class(superclass.name), closure: view_class
-            )
-          ]
+        ancestry = if superclass.nil? || BASE_CONTROLLERS.include?(superclass.name.delete_prefix('::'))
+                     [
+                       Solargraph::Pin::Reference::Superclass.new(name: '::ActionView::Base', closure: view_class),
+                       *helper_modules(source_map.filename).map do |name|
+                         Solargraph::Pin::Reference::Include.new(name: name, closure: view_class)
+                       end
+                     ]
+                   else
+                     [
+                       Solargraph::Pin::Reference::Superclass.new(
+                         name: self.class.view_class(superclass.name), closure: view_class
+                       )
+                     ]
+                   end
+        [view_class, *ancestry, *assigns(source_map, controller, view_class)]
+      end
+
+      # The controller's instance variables, assigned in any of its methods (callbacks included), as instance
+      # variables of its view class. A parent controller's reach the view through the parent's view class.
+      #
+      # @param source_map [Solargraph::SourceMap]
+      # @param controller [Solargraph::Pin::Namespace]
+      # @param view_class [Solargraph::Pin::Namespace]
+      # @return [Array<Solargraph::Pin::Base>]
+      def assigns(source_map, controller, view_class)
+        ivars = source_map.pins.select do |pin|
+          pin.is_a?(Solargraph::Pin::InstanceVariable) && pin.scope == :instance &&
+            pin.binder.namespace == controller.path
         end
+        return [] if ivars.empty?
+
+        # A bodyless method gives the copies an instance binder in the view class
+        holder = Solargraph::Pin::Method.new(
+          name: '__assigns', closure: view_class, scope: :instance, visibility: :private, location: controller.location
+        )
+        [holder, *ivars.map do |ivar|
+          Assign.new(origins: [ivar], name: ivar.name, closure: holder, location: ivar.location, comments: ivar.comments)
+        end]
       end
 
       # Rails includes every helper module into every view by default (`include_all_helpers`).

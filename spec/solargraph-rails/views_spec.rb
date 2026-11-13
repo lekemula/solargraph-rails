@@ -22,6 +22,7 @@ RSpec.describe Solargraph::Rails::Views, :herb do
   def definitions(relpath, line, needle)
     filename = File.join(root, relpath)
     column = File.readlines(filename)[line].index(needle)
+    column += 1 if needle.start_with?("@")
     library.definitions_at(filename, line, column)
   end
 
@@ -74,5 +75,39 @@ RSpec.describe Solargraph::Rails::Views, :herb do
     %w[link_to post_title current_user].each_with_index do |helper, line|
       expect(definitions('lib/plain.rb', line, helper)).to be_empty, helper
     end
+  end
+
+  it 'resolves ivars assigned in actions and before_action callbacks, with their type' do
+    pins = definitions('app/views/posts/show.html.erb', 4, '@post')
+
+    expect(pins.size).to eq(1)
+    expect(pins.first.location.filename).to eq(File.join(root, 'app/controllers/posts_controller.rb'))
+    expect(pins.first.location.range.start.line).to eq(9).or eq(15)
+    expect(pins.first.return_type.to_s).to eq('Post')
+  end
+
+  it 'types ivars assigned from private controller methods' do
+    pin = definitions('app/views/posts/show.html.erb', 4, '@comments').first
+
+    expect(pin.return_type.to_s).to eq('Array<String>')
+  end
+
+  it 'resolves ivars of parent controllers' do
+    pin = definitions('app/views/posts/show.html.erb', 4, '@locale').first
+
+    expect(pin.location.filename).to eq(File.join(root, 'app/controllers/application_controller.rb'))
+    expect(pin.return_type.to_s).to eq('Symbol')
+  end
+
+  it 'does not resolve ivars of other controllers' do
+    expect(definitions('app/views/comments/index.html.erb', 0, '@post')).to be_empty
+    expect(definitions('app/views/comments/index.html.erb', 0, '@locale')).not_to be_empty
+  end
+
+  it 'gives views with no matching controller the application controller\'s ivars only' do
+    layout = 'app/views/layouts/application.html.erb'
+
+    expect(definitions(layout, 2, '@locale').first&.return_type.to_s).to eq('Symbol')
+    expect(definitions(layout, 2, '@post')).to be_empty
   end
 end
