@@ -54,6 +54,12 @@ RSpec.describe Solargraph::Rails::Views, :herb do
     library.definitions_at(filename, line, column)
   end
 
+  # @param (see #definitions)
+  # @return [Array<Array(String, Integer)>] the file name and 0-based start line of each definition
+  def definition_lines(relpath, line, needle)
+    definitions(relpath, line, needle).map { |pin| [File.basename(pin.location.filename), pin.location.range.start.line] }
+  end
+
   it 'resolves ActionView helpers in a view' do
     pin = definitions('app/views/posts/show.html.erb', 1, 'link_to').first
 
@@ -192,11 +198,10 @@ RSpec.describe Solargraph::Rails::Views, :herb do
   end
 
   it 'resolves ivars assigned in actions and before_action callbacks, with their type' do
-    pins = definitions('app/views/posts/show.html.erb', 4, '@post')
+    show = 'app/views/posts/show.html.erb'
 
-    expect(pins.map { |pin| [File.basename(pin.location.filename), pin.location.range.start.line] })
-      .to eq([['posts_controller.rb', 9], ['posts_controller.rb', 15]])
-    expect(pins.map { |pin| pin.return_type.to_s }.uniq).to eq(['Post'])
+    expect(definition_lines(show, 4, '@post')).to eq([['posts_controller.rb', 9], ['posts_controller.rb', 15]])
+    expect(definitions(show, 4, '@post').map { |pin| pin.return_type.to_s }.uniq).to eq(['Post'])
   end
 
   it 'types ivars assigned from private controller methods' do
@@ -337,6 +342,14 @@ RSpec.describe Solargraph::Rails::Views, :herb do
 
       expect(source_map.all_pins.grep(Solargraph::Pin::InstanceVariable).map(&:name))
         .to include('@post', '@comment')
+    end
+
+    it 'lists the assignments of every controller whose views render a shared partial' do
+      byline = 'app/views/shared/_byline.html.erb'
+
+      expect(definition_lines(byline, 0, '@post'))
+        .to eq([['pages_controller.rb', 2], ['posts_controller.rb', 9], ['posts_controller.rb', 15]])
+      expect(definitions(byline, 0, '@post').map { |pin| pin.return_type.to_s }.uniq).to eq(['Post'])
     end
 
     it 'gives a shared partial nothing renders the application controller\'s ivars only' do
