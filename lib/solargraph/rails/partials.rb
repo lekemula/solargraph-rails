@@ -94,6 +94,20 @@ module Solargraph
         File.basename(filename).start_with?('_')
       end
 
+      # The directory a partial name without a slash is looked up in: the view's, or the controller's
+      # `controller_path`. Rails looks there first (ActionView::PartialRenderer#find_template uses the lookup
+      # context's prefixes for a name without a slash); the prefixes of parent controllers are not followed.
+      #
+      # @param filename [String]
+      # @return [String, nil] nil for a file that is neither a view nor a controller
+      def self.lookup_dir(filename)
+        if Views.view?(filename)
+          File.dirname(filename[(filename.rindex('/app/views/') + 11)..])
+        elsif filename.include?('/app/controllers/') && filename.end_with?('_controller.rb')
+          filename[(filename.rindex('/app/controllers/') + 17)..].delete_suffix('_controller.rb')
+        end
+      end
+
       def initialize
         @mutex = Mutex.new
         # @type [Hash{String => Array(String, Array<Array(String, String, CallSite)>)}]
@@ -226,7 +240,7 @@ module Solargraph
       # @return [Array<Array(String, String, CallSite)>] the partial path, local name and call site of each local
       def scan(source)
         controller = !Views.view?(source.filename)
-        dir = rendering_dir(source.filename, controller)
+        dir = self.class.lookup_dir(source.filename)
         renders = []
         walker = Walker.from_source(source)
         walker.on :send, [nil, :render] do |node|
@@ -234,21 +248,6 @@ module Solargraph
         end
         walker.walk
         renders
-      end
-
-      # The directory a partial name without a slash is looked up in: the view's, or the controller's
-      # `controller_path`. Rails looks there first (ActionView::PartialRenderer#find_template uses the lookup
-      # context's prefixes for a name without a slash); the prefixes of parent controllers are not followed.
-      #
-      # @param filename [String]
-      # @param controller [Boolean]
-      # @return [String]
-      def rendering_dir(filename, controller)
-        if controller
-          filename[(filename.rindex('/app/controllers/') + 17)..].delete_suffix('_controller.rb')
-        else
-          File.dirname(filename[(filename.rindex('/app/views/') + 11)..])
-        end
       end
 
       # Rails' render forms, from ActionView::Helpers::RenderingHelper#render (views) and
