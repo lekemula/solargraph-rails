@@ -1,0 +1,3 @@
+link_to
+post_title
+current_user

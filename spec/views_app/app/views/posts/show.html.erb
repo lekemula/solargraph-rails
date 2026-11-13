@@ -1,0 +1,4 @@
+<h1><%= post_title(nil) %></h1>
+<p><%= link_to "Back", "/posts" %></p>
+<p><%= current_user.name %> — <%= page_title %></p>
+<% load_comments %>
