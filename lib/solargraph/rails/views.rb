@@ -13,6 +13,7 @@ module Solargraph
     class Views
       ROOT_VIEW_CLASS = 'ApplicationControllerView'.freeze
       BASE_CONTROLLERS = %w[ActionController::Base ActionController::API].freeze
+      CALLBACKS = %i[before_action prepend_before_action append_before_action].freeze
 
       # A controller instance variable copied into its view class. It keeps the assignment's location, and infers
       # its type in the controller, where methods like a private `load_comments` exist.
@@ -20,20 +21,33 @@ module Solargraph
         # @return [Array<Solargraph::Pin::InstanceVariable>] the controller's instance variables this copies
         attr_reader :origins
 
+        # @return [Boolean] whether a before_action callback assigns it
+        attr_reader :callback
+
         # @param origins [Array<Solargraph::Pin::InstanceVariable>]
+        # @param callback [Boolean]
         # @param splat [Hash] the instance variable's attributes
-        def initialize(origins: [], **splat)
+        def initialize(origins: [], callback: false, **splat)
           super(**splat)
           @origins = origins
+          @callback = callback
         end
 
         # Solargraph merges every assignment a reference can see into one pin, which must keep all their origins.
+        # Its location is a callback's assignment if there is one, since callbacks run for most actions, else the
+        # first assignment.
         #
         # @param other [Solargraph::Pin::InstanceVariable]
         # @param attrs [Hash]
         # @return [Solargraph::Pin::InstanceVariable]
         def combine_with(other, attrs = {})
-          super(other, attrs.merge(origins: origins + (other.is_a?(Assign) ? other.origins : [other])))
+          other_callback = other.is_a?(Assign) && other.callback
+          merged = {
+            origins: origins + (other.is_a?(Assign) ? other.origins : [other]),
+            callback: callback || other_callback
+          }
+          merged[:location] = callback ? location : other.location unless callback == other_callback
+          super(other, attrs.merge(merged))
         end
 
         # @param api_map [Solargraph::ApiMap]
@@ -238,9 +252,29 @@ module Solargraph
         holder = Solargraph::Pin::Method.new(
           name: '__assigns', closure: view_class, scope: :instance, visibility: :private, location: controller.location
         )
+        callbacks = callback_names(source_map.source)
         [holder, *ivars.map do |ivar|
-          Assign.new(origins: [ivar], name: ivar.name, closure: holder, location: ivar.location, comments: ivar.comments)
+          Assign.new(
+            origins: [ivar], callback: callbacks.include?(ivar.closure&.name), name: ivar.name, closure: holder,
+            location: ivar.location, comments: ivar.comments
+          )
         end]
+      end
+
+      # @param source [Solargraph::Source] a controller's source
+      # @return [Array<String>] the methods its before_action callbacks name
+      def callback_names(source)
+        return [] unless source.code.include?('before_action')
+
+        names = []
+        walker = Walker.from_source(source)
+        CALLBACKS.each do |callback|
+          walker.on :send, [nil, callback] do |ast|
+            ast.children[2..].each { |arg| names << arg.children[0].to_s if arg.type == :sym }
+          end
+        end
+        walker.walk
+        names
       end
 
       # Rails includes every helper module into every view by default (`include_all_helpers`).

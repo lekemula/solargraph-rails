@@ -80,10 +80,9 @@ RSpec.describe Solargraph::Rails::Views, :herb do
   it 'resolves ivars assigned in actions and before_action callbacks, with their type' do
     pins = definitions('app/views/posts/show.html.erb', 4, '@post')
 
-    expect(pins.size).to eq(1)
-    expect(pins.first.location.filename).to eq(File.join(root, 'app/controllers/posts_controller.rb'))
-    expect(pins.first.location.range.start.line).to eq(9).or eq(15)
-    expect(pins.first.return_type.to_s).to eq('Post')
+    expect(pins.map { |pin| [File.basename(pin.location.filename), pin.location.range.start.line] })
+      .to eq([['posts_controller.rb', 9], ['posts_controller.rb', 15]])
+    expect(pins.map { |pin| pin.return_type.to_s }.uniq).to eq(['Post'])
   end
 
   it 'types ivars assigned from private controller methods' do
