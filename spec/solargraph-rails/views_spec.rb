@@ -114,6 +114,10 @@ RSpec.describe Solargraph::Rails::Views, :herb do
       expect(definitions(partial, 0, 'post').first.location.filename).to eq(File.join(root, 'app/views/posts/feed.html.erb'))
     end
 
+    it 'types the element of a collection without a type parameter, such as a relation, by its first element' do
+      expect(definitions('app/views/posts/_entry.html.erb', 0, 'entry').first.return_type.to_s).to eq('Post')
+    end
+
     it 'renders a collection at the partial path its elements are named after' do
       partial = 'app/views/comments/_comment.html.erb'
 

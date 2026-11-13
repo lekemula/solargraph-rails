@@ -39,18 +39,24 @@ module Solargraph
           closure = source_map.locate_closure_pin(start.line, start.character)
           locals = source_map.locals_at(Solargraph::Location.new(location.filename, Solargraph::Range.new(start, start)))
           type = Solargraph::Parser.chain(@node, location.filename).infer(api_map, closure, locals)
-          @collection ? element_type(type) : type
+          @collection ? element_type(api_map, type) : type
         rescue Solargraph::FileNotFoundError
           Solargraph::ComplexType::UNDEFINED
         end
 
         private
 
+        # What the collection's `first` returns: an Array's type parameter, or the model of a relation, whose
+        # element type comes from the query methods it mixes in rather than a type parameter.
+        #
+        # @param api_map [Solargraph::ApiMap]
         # @param type [Solargraph::ComplexType]
         # @return [Solargraph::ComplexType]
-        def element_type(type)
-          elements = type.items.flat_map(&:value_types).flat_map(&:items)
-          elements.empty? ? Solargraph::ComplexType::UNDEFINED : Solargraph::ComplexType.new(elements.uniq)
+        def element_type(api_map, type)
+          return type if type.undefined?
+
+          first = Solargraph::Source::Chain.new([Solargraph::Source::Chain::Call.new('first')])
+          first.infer(api_map, Solargraph::Pin::ProxyType.anonymous(type, source: :solargraph_rails), []).without_nil
         end
       end
 

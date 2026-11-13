@@ -10,4 +10,9 @@ module PostsHelper
   def posts
     [Post.new]
   end
+
+  # @return [PostArchive]
+  def archive
+    PostArchive.new
+  end
 end

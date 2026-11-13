@@ -4,3 +4,4 @@
 <%= render "index", post: Post.new %>
 <%= render "tree", node: 1 %>
 <% post = Post.new %><%= render partial: "summary", locals: { post:, author: current_user } %>
+<%= render partial: "entry", collection: archive %>
