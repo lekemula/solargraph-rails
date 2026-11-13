@@ -114,6 +114,13 @@ module Solargraph
           closure.location.filename == other_loc.filename && visible_in_closure?(other_closure)
         end
 
+        # Go-to-definition lists the strict locals declaration, if any, and every call site that passes the local.
+        #
+        # @return [Array<Solargraph::Location>]
+        def definition_locations
+          [location, *call_sites.map(&:location)].compact.uniq
+        end
+
         # The default value's type and the types the call sites pass.
         def probe(api_map)
           types = [super, *call_sites.map { |site| site.infer(api_map) }].reject(&:undefined?)

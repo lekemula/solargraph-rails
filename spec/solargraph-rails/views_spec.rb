@@ -146,6 +146,18 @@ RSpec.describe Solargraph::Rails::Views, :herb do
       expect(post.location.filename).to eq(File.join(root, 'app/views/posts/feed.html.erb'))
     end
 
+    it 'lists every call site that passes a local' do
+      summary = 'app/views/posts/_summary.html.erb'
+
+      expect(definition_lines(summary, 0, 'author')).to eq([['previews_controller.rb', 2], ['feed.html.erb', 5]])
+      expect(definitions(summary, 0, 'author').map { |pin| pin.return_type.to_s }.uniq).to eq(['User'])
+    end
+
+    it 'lists the strict locals declaration and every call site that passes a local' do
+      expect(definition_lines('app/views/posts/_card.html.erb', 1, 'post'))
+        .to eq([['_card.html.erb', 0], ['index.html.erb', 0], ['links.html.erb', 1]])
+    end
+
     it 'declares the element, counter and iteration of a rendered collection' do
       partial = 'app/views/posts/_post.html.erb'
       types = %w[post post_counter post_iteration].map do |name|
