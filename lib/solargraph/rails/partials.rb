@@ -18,11 +18,12 @@ module Solargraph
       # The `render` parameters that name a partial, as [method namespace, parameter name, decl]. Views call
       # ActionView::Helpers::RenderingHelper#render(options = {}, locals = {}), where `render "x", post: post` and
       # `render partial: "x"` both pass the name in options. Controllers resolve `render(*args)` to
-      # ActionController::Instrumentation (an anonymous splat) or, depending on the Rails version, to
-      # ActionController::Rendering or AbstractController::Rendering.
+      # ActionController::Instrumentation (an anonymous splat, or `args` with the gem_rbs_collection signature) or,
+      # depending on the Rails version, to ActionController::Rendering or AbstractController::Rendering.
       RENDER_PARAMETERS = [
         ['ActionView::Helpers::RenderingHelper', 'options', :optarg],
         ['ActionController::Instrumentation', '', :restarg],
+        ['ActionController::Instrumentation', 'args', :restarg],
         ['ActionController::Rendering', 'args', :restarg],
         ['AbstractController::Rendering', 'args', :restarg]
       ].freeze
