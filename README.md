@@ -48,6 +48,23 @@ That's where this plugin for Solargraph comes in: it understands db/schema.rb an
 
 and more!
 
+## ERB views
+
+With [solargraph-herb](https://github.com/lekemula/solargraph-herb), which maps the Ruby inside ERB templates for
+Solargraph, go to definition and hover also work in `app/views/**/*.erb`. Each view runs in a view class mirroring its
+controller, so it sees:
+
+- ActionView helpers (`link_to`, `form_with`) and your app's helper modules;
+- the controller's `helper_method`s;
+- the controller's instance variables, typed from their assignments, `before_action` callbacks included;
+- partial locals, from strict locals (`<%# locals: (post:) %>`) and from the `render` calls that pass them.
+
+This needs Solargraph changes that are not released yet
+([castwide/solargraph#1489](https://github.com/castwide/solargraph/pull/1489) and its follow-up
+[lekemula/solargraph#5](https://github.com/lekemula/solargraph/pull/5)); see
+[solargraph-herb's README](https://github.com/lekemula/solargraph-herb#installation) for the setup. With a released
+Solargraph, views are left alone.
+
 ## Installation
 
 ###  Install `solargraph` and `solargraph-rails`

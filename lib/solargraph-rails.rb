@@ -22,6 +22,8 @@ require_relative 'solargraph/rails/load_hooks'
 require_relative 'solargraph/rails/mounted_helpers'
 require_relative 'solargraph/rails/routes'
 require_relative 'solargraph/rails/route_helpers'
+require_relative 'solargraph/rails/views'
+require_relative 'solargraph/rails/partials'
 require_relative 'solargraph/rails/version'
 
 module Solargraph
@@ -62,8 +64,9 @@ module Solargraph
         Puma.instance.add_dsl(environ, basename)
         Importmap.instance.add_dsl(environ, basename)
         route_helpers = run_environ { RouteHelpers.instance.local(source_map) }
+        views = run_environ { Views.instance.local(source_map) }
 
-        return environ.merge(route_helpers) unless ns.is_a?(Solargraph::Pin::Namespace)
+        return environ.merge(route_helpers).merge(views) unless ns.is_a?(Solargraph::Pin::Namespace)
 
         pins += run_feature { Schema.instance.process(source_map, ns) }
         pins += run_feature { Annotate.instance.process(source_map, ns) }
@@ -77,7 +80,16 @@ module Solargraph
 
         environ = Solargraph::Environ.new(pins: pins)
         Puma.instance.add_dsl(environ, basename)
-        environ.merge(route_helpers)
+        environ.merge(route_helpers).merge(views)
+      end
+
+      # @param source [Solargraph::Source] a transformed source
+      # @return [Solargraph::Pin::Closure, nil] the closure an ERB view's Ruby runs in
+      def source_closure(source)
+        Views.instance.source_closure(source)
+      rescue => error
+        Solargraph.logger.warn(error.full_message(highlight: false))
+        nil
       end
 
       # @param root [String] the gem's root directory
@@ -102,6 +114,7 @@ module Solargraph
       def object(api_map, rooted_tag, scope, _visibility, _deep, _skip, _no_core)
         pins = run_feature { MountedHelpers.instance.object(api_map, rooted_tag, scope) }
         pins += run_feature { Routes.instance.object(api_map, rooted_tag, scope) }
+        pins += run_feature { Views.instance.object(api_map, rooted_tag, scope) }
         pins.empty? ? EMPTY_ENVIRON : Solargraph::Environ.new(pins: pins)
       end
 

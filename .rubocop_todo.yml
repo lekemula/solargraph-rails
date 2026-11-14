@@ -476,6 +476,7 @@ RSpec/SpecFilePathFormat:
     - 'spec/solargraph-rails/routes_spec.rb'
     - 'spec/solargraph-rails/schema_spec.rb'
     - 'spec/solargraph-rails/storage_spec.rb'
+    - 'spec/solargraph-rails/views_spec.rb'
 
 # Offense count: 6
 # This cop supports safe autocorrection (--autocorrect).

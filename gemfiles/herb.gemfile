@@ -1,0 +1,14 @@
+# Bundle for the ERB view specs (tagged :herb). They need Solargraph's unreleased source_closure hook and
+# solargraph-herb, from local checkouts:
+#
+#   BUNDLE_GEMFILE=gemfiles/herb.gemfile bundle exec rspec --tag herb
+#
+# Under the main Gemfile the hook is missing, so spec_helper excludes the :herb specs.
+eval_gemfile File.expand_path('../Gemfile', __dir__)
+
+gem 'solargraph', path: ENV.fetch('SOLARGRAPH_PATH') {
+  File.expand_path('~/Projects/open_source/solargraph__worktrees/herb-source-closure')
+}
+gem 'solargraph-herb', path: ENV.fetch('SOLARGRAPH_HERB_PATH') {
+  File.expand_path('~/Projects/open_source/solargraph-herb')
+}

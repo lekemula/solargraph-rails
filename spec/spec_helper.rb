@@ -30,7 +30,18 @@ require 'debug'
 require 'fileutils'
 require_relative './helpers'
 
+# ERB views need Solargraph's source_closure hook and solargraph-herb, which only gemfiles/herb.gemfile provides
+herb_supported = Solargraph::Convention::Base.method_defined?(:source_closure) &&
+                 begin
+                   require 'solargraph-herb'
+                   true
+                 rescue LoadError
+                   false
+                 end
+
 RSpec.configure do |config|
+  config.filter_run_excluding :herb unless herb_supported
+
   coverages = {}
 
   config.expect_with :rspec do |expectations|

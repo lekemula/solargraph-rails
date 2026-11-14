@@ -23,5 +23,7 @@
 
   <body>
     <%= yield %>
+    <footer><%= current_user.name %> <%= link_to "Home", "/" %> <%= page_title %></footer>
+    <p><%= @locale %> <%= @post %></p>
   </body>
 </html>

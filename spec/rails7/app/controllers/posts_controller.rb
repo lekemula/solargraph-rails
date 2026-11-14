@@ -1,0 +1,1 @@
+../../../rails8/app/controllers/posts_controller.rb
