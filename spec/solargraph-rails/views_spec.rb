@@ -90,6 +90,14 @@ RSpec.describe Solargraph::Rails::Views, :herb do
     expect(definitions('app/views/posts/show.html.erb', 3, 'load_comments')).to be_empty
   end
 
+  it 'resolves route helpers in a view to the routes file' do
+    pin = definitions('app/views/posts/show.html.erb', 6, 'edit_post_path').first
+
+    expect(pin.location.filename).to eq(File.join(root, 'config/routes/route_helpers.rb'))
+    expect(pin.location.range.start.line).to eq(1)
+    expect(pin.return_type.to_s).to eq('String')
+  end
+
   it 'runs views with no matching controller in the application controller\'s view class' do
     layout = 'app/views/layouts/application.html.erb'
 
