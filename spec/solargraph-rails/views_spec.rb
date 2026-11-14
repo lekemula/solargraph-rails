@@ -93,7 +93,7 @@ RSpec.describe Solargraph::Rails::Views, :herb do
   it 'resolves route helpers in a view to the routes file' do
     pin = definitions('app/views/posts/show.html.erb', 6, 'edit_post_path').first
 
-    expect(pin.location.filename).to eq(File.join(root, 'config/routes.rb'))
+    expect(pin.location.filename).to eq(File.join(root, 'config/routes/route_helpers.rb'))
     expect(pin.location.range.start.line).to eq(1)
     expect(pin.return_type.to_s).to eq('String')
   end
