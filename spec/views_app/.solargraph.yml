@@ -1,3 +1,0 @@
-include:
-  - "**/*.rb"
-  - "app/views/**/*.erb"

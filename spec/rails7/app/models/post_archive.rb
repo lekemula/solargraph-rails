@@ -1,0 +1,1 @@
+../../../rails8/app/models/post_archive.rb

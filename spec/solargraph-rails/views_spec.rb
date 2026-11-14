@@ -1,14 +1,40 @@
 RSpec.describe Solargraph::Rails::Views, :herb do
-  def root
-    File.expand_path('../views_app', __dir__)
+  # The views and their controllers, helpers and models are fixture files of spec/rails8; spec/rails7 links to them.
+  def self.root
+    File.expand_path("../rails#{Rails::VERSION::MAJOR}", __dir__)
+  end
+
+  # A workspace of the fixture app with its ERB views. Specs without solargraph-herb load the same app, so its
+  # .solargraph.yml leaves the views out. The workspace reloads its config to take in a new file, so it swaps whatever
+  # config it holds for one that includes the views.
+  #
+  # @return [Solargraph::Workspace]
+  def self.workspace
+    config_class = Class.new(Solargraph::Workspace::Config) do
+      private
+
+      def config_data
+        super.tap { |data| data['include'] += ['app/views/**/*.erb'] }
+      end
+    end
+    Class.new(Solargraph::Workspace) do
+      define_method(:config) do
+        @config = config_class.new(directory) unless @config.is_a?(config_class)
+        @config
+      end
+    end.new(root)
   end
 
   # Loading the ActionView docs takes seconds, so the examples share one library
   def self.library
-    @library ||= Solargraph::Library.load(File.expand_path('../views_app', __dir__)).tap do |library|
+    @library ||= Solargraph::Library.new(workspace).tap do |library|
       library.map!
       library.catalog
     end
+  end
+
+  def root
+    self.class.root
   end
 
   def library
@@ -65,10 +91,10 @@ RSpec.describe Solargraph::Rails::Views, :herb do
   it 'runs views with no matching controller in the application controller\'s view class' do
     layout = 'app/views/layouts/application.html.erb'
 
-    expect(definitions(layout, 1, 'current_user').first&.location&.filename)
+    expect(definitions(layout, 25, 'current_user').first&.location&.filename)
       .to eq(File.join(root, 'app/controllers/concerns/authentication.rb'))
-    expect(definitions(layout, 1, 'link_to').first&.path).to eq('ActionView::Helpers::UrlHelper#link_to')
-    expect(definitions(layout, 1, 'page_title')).to be_empty
+    expect(definitions(layout, 25, 'link_to').first&.path).to eq('ActionView::Helpers::UrlHelper#link_to')
+    expect(definitions(layout, 25, 'page_title')).to be_empty
   end
 
   describe 'partial locals' do
@@ -184,8 +210,8 @@ RSpec.describe Solargraph::Rails::Views, :herb do
   it 'gives views with no matching controller the application controller\'s ivars only' do
     layout = 'app/views/layouts/application.html.erb'
 
-    expect(definitions(layout, 2, '@locale').first&.return_type.to_s).to eq('Symbol')
-    expect(definitions(layout, 2, '@post')).to be_empty
+    expect(definitions(layout, 26, '@locale').first&.return_type.to_s).to eq('Symbol')
+    expect(definitions(layout, 26, '@post')).to be_empty
   end
 
   describe 'shared partials' do

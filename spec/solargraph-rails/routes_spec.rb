@@ -11,7 +11,7 @@ module RoutesSpecWorkspace
       root 'posts#index'
       root 'admin/posts#index'
       root 'posts#find_post'
-      resources :comments
+      resources :unknowns
       namespace :admin do
         resources :posts
       end
@@ -112,7 +112,7 @@ RSpec.describe Solargraph::Rails::Routes do
   end
 
   it 'ignores routes to unknown controllers' do
-    expect(definitions_of(6, ':comments')).not_to include(be_a(Solargraph::Pin::FactoryParameter))
+    expect(definitions_of(6, ':unknowns')).not_to include(be_a(Solargraph::Pin::FactoryParameter))
   end
 
   it 'ignores ApplicationController' do
