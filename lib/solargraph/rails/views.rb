@@ -208,7 +208,8 @@ module Solargraph
       # @param filename [String]
       # @return [Solargraph::Environ]
       def view_environ(filename)
-        Solargraph::Environ.new(requires: %w[action_view action_controller], pins: partial_view_class_pins(filename))
+        pins = partial_view_class_pins(filename) + Partials.instance.targets(filename)
+        Solargraph::Environ.new(requires: %w[action_view action_controller], pins: pins)
       end
 
       # A partial rendered for several controllers runs in a view class of its own, holding all their instance
