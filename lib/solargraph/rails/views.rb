@@ -52,6 +52,15 @@ module Solargraph
           super(other, attrs.merge(merged))
         end
 
+        # Go-to-definition lists each controller assignment this copies; #location keeps the callback-preferred one.
+        #
+        # @return [Array<Solargraph::Location>]
+        def definition_locations
+          return super if origins.empty?
+
+          origins.filter_map(&:location).uniq
+        end
+
         # @param api_map [Solargraph::ApiMap]
         # @return [Solargraph::ComplexType]
         def probe(api_map)
