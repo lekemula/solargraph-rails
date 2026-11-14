@@ -7,7 +7,7 @@
 eval_gemfile File.expand_path('../Gemfile', __dir__)
 
 gem 'solargraph', path: ENV.fetch('SOLARGRAPH_PATH') {
-  File.expand_path('~/Projects/open_source/solargraph__worktrees/herb-source-closure')
+  File.expand_path('~/Projects/open_source/solargraph__worktrees/herb-variable-definitions')
 }
 gem 'solargraph-herb', path: ENV.fetch('SOLARGRAPH_HERB_PATH') {
   File.expand_path('~/Projects/open_source/solargraph-herb')
