@@ -25,8 +25,10 @@ RSpec.describe Solargraph::Rails::Views, :herb do
     end.new(root)
   end
 
-  # Loading the ActionView docs takes seconds, so the examples share one library
+  # Loading the fixture app takes seconds, so the examples share one library, nested groups included
   def self.library
+    return superclass.library if superclass.respond_to?(:library)
+
     @library ||= Solargraph::Library.new(workspace).tap do |library|
       library.map!
       library.catalog
